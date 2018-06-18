@@ -9,9 +9,9 @@ hmm = HiddenMarkovModel()
 hmm.train_hmm(train_data)
 
 #
-# tagged = hmm.tag("avere trovare la casa".replace(",", "").split(" "))
-# tagged2 = hmm.tag("il mare essere la cosa più bella".replace(",", "").split(" "))
-# tagged3 = hmm.tag("entro domani sera avere proclamare".replace(",", "").split(" "))
+# tagged = hmm.tag("ciao .".replace(",", "").split(" "))
+# tagged2 = hmm.tag("se tale decisione essere prendere anteriormente a il data".replace(",", "").split(" "))
+# tagged3 = hmm.tag("portare il mio cane".replace(",", "").split(" "))
 # print(tagged)
 # print(tagged2)
 # print(tagged3)
