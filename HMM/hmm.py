@@ -1,11 +1,11 @@
 import numpy as np
-import pickle
+import HMM.utils.filesystem_utils as utility
 
 
 class HiddenMarkovModel:
 
-    hmm_dict = []                       # List of dictionaries
     word_list = []                      # All the considered words
+    likelihood_list = []
     count_tags = np.zeros(17)           # Count global tags
     priori = np.zeros((17, 17))         # A-priori prob matrix
     ending_prob = np.zeros(17)          # Ending prob for each tag
@@ -22,69 +22,44 @@ class HiddenMarkovModel:
             previous_tag = ""
             for sent_i in range(0, len(sent)):
                 tupleOfSent = sent[sent_i]
-                self.update_tag_count(tupleOfSent[1])
+                self.count_tags = self.update_tag_count(tupleOfSent[1], self.count_tags)
                 self.update_prior(tupleOfSent[1], previous_tag)
                 if tupleOfSent[0] in self.word_list:
-
                     # Update statistics for an already present in dict word
-                    for rec in self.hmm_dict:
-                        if rec["lemma"] == tupleOfSent[0]:
-                            likelihood = rec.get("likelihood")
-                            rec.update(dict(likelihood=self.update_likelihood(tupleOfSent[1], likelihood)))
-                            if sent_i == 0:
-                                self.update_starting_prob(tupleOfSent[1])
-                            if sent_i == (len(sent) - 1):
-                                self.update_ending_prob(tupleOfSent[1])
+                    index = self.word_list.index(tupleOfSent[0])
+                    self.likelihood_list[index] = self.update_likelihood(tupleOfSent[1], self.likelihood_list[index])
+                    if sent_i == 0:
+                        self.starting_prob = self.update_tag_count(tupleOfSent[1], self.starting_prob)
+                    if sent_i == (len(sent) - 1):
+                        self.ending_prob = self.update_tag_count(tupleOfSent[1], self.ending_prob)
                 else:
 
                     # If the considered word is not present in the dictionary insert it in the dictionary
-                    self.hmm_dict.append(dict(lemma=tupleOfSent[0], likelihood=self.update_likelihood(tupleOfSent[1])))
                     self.word_list.append(tupleOfSent[0])
-
+                    self.likelihood_list.append(self.update_likelihood(tupleOfSent[1]))
                     if sent_i == 0:
-                        self.update_starting_prob(tupleOfSent[1])
+                        self.starting_prob = self.update_tag_count(tupleOfSent[1], self.starting_prob)
                     if sent_i == (len(sent) - 1):
-                        self.update_ending_prob(tupleOfSent[1])
-
+                        self.ending_prob = self.update_tag_count(tupleOfSent[1], self.ending_prob)
                 previous_tag = tupleOfSent[1]
 
         print("The dictionary contains " + str(len(self.word_list)) + " elements")
 
         # Normalize counts and get prior and likelihood prob
         self.normalize_prior()
-        self.normalize_ending_prob()
-        self.normalize_starting_prob()
+        self.starting_prob = self.normalize_vect_count_tags(self.starting_prob)
+        self.ending_prob = self.normalize_vect_count_tags(self.ending_prob)
 
-        i = 0
-        for item in self.hmm_dict:
-            self.hmm_dict[i]["likelihood"] = self.normalize_vect_count_tags(item["likelihood"])
-            i = i + 1
+        for i in range(0, len(self.likelihood_list)):
+            self.likelihood_list[i] = self.normalize_vect_count_tags(self.likelihood_list[i])
+
         print("::: HMM trained successfully :::")
         if save_model:
-            with open("models/hmm_dict.file", "wb") as f:
-                pickle.dump(self.hmm_dict, f, pickle.HIGHEST_PROTOCOL)
-            with open("models/count_tags.file", "wb") as f:
-                pickle.dump(self.count_tags, f, pickle.HIGHEST_PROTOCOL)
-            with open("models/priori.file", "wb") as f:
-                pickle.dump(self.priori, f, pickle.HIGHEST_PROTOCOL)
-            with open("models/ending_prob.file", "wb") as f:
-                pickle.dump(self.ending_prob, f, pickle.HIGHEST_PROTOCOL)
-            with open("models/starting_prob.file", "wb") as f:
-                pickle.dump(self.starting_prob, f, pickle.HIGHEST_PROTOCOL)
-            print("::: HMM Model saved :::")
+            utility.save_model(self.word_list, self.likelihood_list, self.count_tags, self.priori, self.ending_prob, self.starting_prob)
         return
 
     def load_model(self):
-        with open("models/hmm_dict.file", "rb") as f:
-            self.hmm_dict = pickle.load(f)
-        with open("models/count_tags.file", "rb") as f:
-            self.count_tags = pickle.load(f)
-        with open("models/priori.file", "rb") as f:
-            self.priori = pickle.load(f)
-        with open("models/ending_prob.file", "rb") as f:
-            self.ending_prob = pickle.load(f)
-        with open("models/starting_prob.file", "rb") as f:
-            self.starting_prob = pickle.load(f)
+        self.word_list, self.likelihood_list, self.count_tags, self.priori, self.ending_prob, self.starting_prob = utility.load_model()
         return
 
     def tag(self, splitted_sent=[]):
@@ -100,15 +75,11 @@ class HiddenMarkovModel:
 
         # Initialization Step - prob first word start the sent
         current_likelihood = self.get_likelihood_vect(splitted_sent[0])
-        print("current_likelihood" + str(current_likelihood))
-        print("starting_prob" + str(self.starting_prob))
-
         viterbi[:, 0] = current_likelihood * self.starting_prob
-        print("viterbi[:, 0]" + str(viterbi[:, 0]))
 
         for observation_i in range(1, T):
             current_likelihood = self.get_likelihood_vect(splitted_sent[observation_i])
-            print("obs " + str(observation_i)+ " :"+str(splitted_sent[observation_i]))
+            print("obs " + str(observation_i) + " :" + str(splitted_sent[observation_i]))
             print(current_likelihood)
 
             for current_state in range(0, N - 1):
@@ -116,16 +87,11 @@ class HiddenMarkovModel:
                 vector_prod = vect * current_likelihood
                 viterbi[current_state, observation_i] = np.max(vector_prod)
                 viterbi_backpointer[current_state, observation_i] = np.argmax(vect)
-                print("LIKELI")
-                print(vect)
-                print("Viterbi i -1")
 
         # Termination Step - prob last word ending sent with a tag
         viterbi[:, T - 1] = np.max(viterbi[:, T - 1] * self.ending_prob)
         last_index = np.argmax(viterbi[:, T - 1] * self.ending_prob)
 
-        print("ending prob " + str(self.ending_prob))
-        print(viterbi[:, T - 1])
         print("\n::: viterbi :::")
         print(viterbi)
         print("\n::: viterbi bp :::")
@@ -145,39 +111,22 @@ class HiddenMarkovModel:
 
     def get_viterbi_path(self, viterbi_backpointer, last_index, column):
         result = []
-        print("::: VITERBI PATH :::")
-        print(viterbi_backpointer)
-        print("Last indx: "+str(last_index))
-        print("column: " + str(column))
         while column >= 0:
             result.append(self.get_tag_from_index(last_index))
             last_index = viterbi_backpointer[int(last_index), column]
             column = column - 1
-
         print("viterbi path: " + str(result))
         return result
 
-    def update_tag_count(self, tag):
+    def update_tag_count(self, tag, array):
         index_count_tag = self.get_tag_index(tag)
-        self.count_tags[index_count_tag] = self.count_tags[index_count_tag] + 1
-        return
-
-    def update_ending_prob(self, tag):
-        tag_index = self.get_tag_index(tag)
-        self.ending_prob[tag_index] = self.ending_prob[tag_index] + 1
-        return
-
-    def update_starting_prob(self, tag):
-        tag_index = self.get_tag_index(tag)
-        self.starting_prob[tag_index] = self.starting_prob[tag_index] + 1
-        return
+        array[index_count_tag] = array[index_count_tag] + 1
+        return array
 
     def update_likelihood(self, tag, params=None):
         if params is None:
             params = np.zeros(17)
-        tag_index = self.get_tag_index(tag)
-        params[tag_index] = params[tag_index] + 1
-        return params
+        return self.update_tag_count(tag, params)
 
     def update_prior(self, tag, previous_tag):
         current_tag = self.get_tag_index(tag)
@@ -186,13 +135,12 @@ class HiddenMarkovModel:
         return
 
     def get_likelihood_vect(self, word):
-        for hmm_item in self.hmm_dict:
-            # retrieve probabilities for current word
-            if hmm_item["lemma"] == word:
-                current_likelihood = hmm_item.get("likelihood")
-                return current_likelihood
-        print("Word " + word + " not retrieved!")
-        return np.zeros(17)
+        if word in self.word_list:
+            index = self.word_list.index(word)
+            return self.likelihood_list[index]
+        else:
+            print("Word " + word + " not retrieved!")
+            return np.zeros(17)
 
     def normalize_vect_count_tags(self, array):
         if array is None:
@@ -203,16 +151,6 @@ class HiddenMarkovModel:
 
     def normalize_prior(self):
         self.priori = self.priori / self.count_tags.reshape(17, 1)
-        return
-
-    def normalize_ending_prob(self):
-        for i in range(0, 16):
-            self.ending_prob[i] = self.ending_prob[i] / self.count_tags[i]
-        return
-
-    def normalize_starting_prob(self):
-        for i in range(0, 16):
-            self.starting_prob[i] = self.starting_prob[i] / self.count_tags[i]
         return
 
     def get_tag_index(self, tag):
