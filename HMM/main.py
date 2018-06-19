@@ -6,8 +6,8 @@ train_data = conllu_utils.get_train_data()
 
 # Train HMM
 hmm = HiddenMarkovModel()
-hmm.train_hmm(train_data)
-
+#hmm.train_hmm(train_data)
+hmm.load_model()
 #
 # tagged = hmm.tag("ciao .".replace(",", "").split(" "))
 # tagged2 = hmm.tag("se tale decisione essere prendere anteriormente a il data".replace(",", "").split(" "))

@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 
 
 class HiddenMarkovModel:
@@ -15,20 +16,21 @@ class HiddenMarkovModel:
                 ("VERB", 7), ("PRON", 8), ("CCONJ", 9), ("NUM", 10), ("ADV", 11),
                 ("INTJ", 12), ("SCONJ", 13), ("X", 14), ("SYM", 15), ("PART", 16))
 
-    def train_hmm(self, train_data):
+    def train_hmm(self, train_data, save_model=True):
         print("::: Begin HMM training :::")
         for sent in train_data:
             previous_tag = ""
             for sent_i in range(0, len(sent)):
                 tupleOfSent = sent[sent_i]
                 self.update_tag_count(tupleOfSent[1])
-                self.get_prior(tupleOfSent[1], previous_tag)
-                if self.word_list.__contains__(tupleOfSent[0]):
+                self.update_prior(tupleOfSent[1], previous_tag)
+                if tupleOfSent[0] in self.word_list:
 
                     # Update statistics for an already present in dict word
                     for rec in self.hmm_dict:
                         if rec["lemma"] == tupleOfSent[0]:
-                            rec.update(dict(likelihood=self.get_likelihood(tupleOfSent[1], rec.get("likelihood"))))
+                            likelihood = rec.get("likelihood")
+                            rec.update(dict(likelihood=self.update_likelihood(tupleOfSent[1], likelihood)))
                             if sent_i == 0:
                                 self.update_starting_prob(tupleOfSent[1])
                             if sent_i == (len(sent) - 1):
@@ -36,7 +38,7 @@ class HiddenMarkovModel:
                 else:
 
                     # If the considered word is not present in the dictionary insert it in the dictionary
-                    self.hmm_dict.append(dict(lemma=tupleOfSent[0], likelihood=self.get_likelihood(tupleOfSent[1])))
+                    self.hmm_dict.append(dict(lemma=tupleOfSent[0], likelihood=self.update_likelihood(tupleOfSent[1])))
                     self.word_list.append(tupleOfSent[0])
 
                     if sent_i == 0:
@@ -58,6 +60,31 @@ class HiddenMarkovModel:
             self.hmm_dict[i]["likelihood"] = self.normalize_vect_count_tags(item["likelihood"])
             i = i + 1
         print("::: HMM trained successfully :::")
+        if save_model:
+            with open("models/hmm_dict.file", "wb") as f:
+                pickle.dump(self.hmm_dict, f, pickle.HIGHEST_PROTOCOL)
+            with open("models/count_tags.file", "wb") as f:
+                pickle.dump(self.count_tags, f, pickle.HIGHEST_PROTOCOL)
+            with open("models/priori.file", "wb") as f:
+                pickle.dump(self.priori, f, pickle.HIGHEST_PROTOCOL)
+            with open("models/ending_prob.file", "wb") as f:
+                pickle.dump(self.ending_prob, f, pickle.HIGHEST_PROTOCOL)
+            with open("models/starting_prob.file", "wb") as f:
+                pickle.dump(self.starting_prob, f, pickle.HIGHEST_PROTOCOL)
+            print("::: HMM Model saved :::")
+        return
+
+    def load_model(self):
+        with open("models/hmm_dict.file", "rb") as f:
+            self.hmm_dict = pickle.load(f)
+        with open("models/count_tags.file", "rb") as f:
+            self.count_tags = pickle.load(f)
+        with open("models/priori.file", "rb") as f:
+            self.priori = pickle.load(f)
+        with open("models/ending_prob.file", "rb") as f:
+            self.ending_prob = pickle.load(f)
+        with open("models/starting_prob.file", "rb") as f:
+            self.starting_prob = pickle.load(f)
         return
 
     def tag(self, splitted_sent=[]):
@@ -65,32 +92,37 @@ class HiddenMarkovModel:
         # N rows: states (pos tag),  T columns: observations (words)
         N = 17
         T = len(splitted_sent)
-        viterbi = np.zeros((N, T + 1))
-        viterbi_backpointer = np.zeros((N, T + 1))
+        viterbi = np.zeros((N, T))
+        viterbi_backpointer = np.zeros((N, T))
 
         # Viterbi
         print("Start tagging sent: " + str(splitted_sent))
 
         # Initialization Step - prob first word start the sent
-        current_likelihood = self.get_params_hmm(splitted_sent[0])
+        current_likelihood = self.get_likelihood_vect(splitted_sent[0])
         print("current_likelihood" + str(current_likelihood))
         print("starting_prob" + str(self.starting_prob))
 
         viterbi[:, 0] = current_likelihood * self.starting_prob
-        print("terbi[:, 0]" + str(viterbi[:, 0]))
+        print("viterbi[:, 0]" + str(viterbi[:, 0]))
 
         for observation_i in range(1, T):
-            current_likelihood = self.get_params_hmm(splitted_sent[observation_i])
+            current_likelihood = self.get_likelihood_vect(splitted_sent[observation_i])
+            print("obs " + str(observation_i)+ " :"+str(splitted_sent[observation_i]))
+            print(current_likelihood)
 
             for current_state in range(0, N - 1):
                 vect = viterbi[:, observation_i - 1] * self.priori[:, current_state]  # Paths to the new position
                 vector_prod = vect * current_likelihood
                 viterbi[current_state, observation_i] = np.max(vector_prod)
                 viterbi_backpointer[current_state, observation_i] = np.argmax(vect)
+                print("LIKELI")
+                print(vect)
+                print("Viterbi i -1")
 
         # Termination Step - prob last word ending sent with a tag
-        viterbi[:, T] = viterbi[:, T - 1] * self.ending_prob
-        last_index = np.argmax(viterbi[:, T])
+        viterbi[:, T - 1] = np.max(viterbi[:, T - 1] * self.ending_prob)
+        last_index = np.argmax(viterbi[:, T - 1] * self.ending_prob)
 
         print("ending prob " + str(self.ending_prob))
         print(viterbi[:, T - 1])
@@ -117,11 +149,9 @@ class HiddenMarkovModel:
         print(viterbi_backpointer)
         print("Last indx: "+str(last_index))
         print("column: " + str(column))
-        result.append(self.get_tag_from_index(last_index))
-
         while column >= 0:
-            last_index = viterbi_backpointer[int(last_index), column]
             result.append(self.get_tag_from_index(last_index))
+            last_index = viterbi_backpointer[int(last_index), column]
             column = column - 1
 
         print("viterbi path: " + str(result))
@@ -142,20 +172,20 @@ class HiddenMarkovModel:
         self.starting_prob[tag_index] = self.starting_prob[tag_index] + 1
         return
 
-    def get_likelihood(self, tag, params=None):
+    def update_likelihood(self, tag, params=None):
         if params is None:
             params = np.zeros(17)
         tag_index = self.get_tag_index(tag)
         params[tag_index] = params[tag_index] + 1
         return params
 
-    def get_prior(self, tag, previous_tag):
+    def update_prior(self, tag, previous_tag):
         current_tag = self.get_tag_index(tag)
         previous_tag = self.get_tag_index(previous_tag)
         self.priori[previous_tag, current_tag] = self.priori[previous_tag, current_tag] + 1
         return
 
-    def get_params_hmm(self, word):
+    def get_likelihood_vect(self, word):
         for hmm_item in self.hmm_dict:
             # retrieve probabilities for current word
             if hmm_item["lemma"] == word:
@@ -187,10 +217,10 @@ class HiddenMarkovModel:
 
     def get_tag_index(self, tag):
         for t in self.tag_list:
-            if t.__contains__(tag):
+            if tag in t:
                 return t[1]
 
     def get_tag_from_index(self, index):
         for t in self.tag_list:
-            if t.__contains__(index):
+            if index in t:
                 return t[0]
