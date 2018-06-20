@@ -22,7 +22,8 @@ class HiddenMarkovModel:
             previous_tag = ""
             for sent_i in range(0, len(sent)):
                 tupleOfSent = sent[sent_i]
-                self.count_tags = self.update_tag_count(tupleOfSent[1], self.count_tags)
+                if sent_i != 0:
+                    self.count_tags = self.update_tag_count(tupleOfSent[1], self.count_tags)
                 self.update_prior(tupleOfSent[1], previous_tag)
                 if tupleOfSent[0] in self.word_list:
                     # Update statistics for an already present in dict word
