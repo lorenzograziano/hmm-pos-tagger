@@ -80,12 +80,10 @@ class HiddenMarkovModel:
 
         for observation_i in range(1, T):
             current_likelihood = self.get_likelihood_vect(splitted_sent[observation_i])
-            print("obs " + str(observation_i) + " :" + str(splitted_sent[observation_i]))
-            print(current_likelihood)
 
             for current_state in range(0, N - 1):
                 vect = viterbi[:, observation_i - 1] * self.priori[:, current_state]  # Paths to the new position
-                vector_prod = vect * current_likelihood
+                vector_prod = vect * current_likelihood[current_state]
                 viterbi[current_state, observation_i] = np.max(vector_prod)
                 viterbi_backpointer[current_state, observation_i] = np.argmax(vect)
 
@@ -93,10 +91,10 @@ class HiddenMarkovModel:
         viterbi[:, T - 1] = np.max(viterbi[:, T - 1] * self.ending_prob)
         last_index = np.argmax(viterbi[:, T - 1] * self.ending_prob)
 
-        print("\n::: viterbi :::")
-        print(viterbi)
-        print("\n::: viterbi bp :::")
-        print(viterbi_backpointer)
+        # print("\n::: viterbi :::")
+        # print(viterbi)
+        # print("\n::: viterbi bp :::")
+        # print(viterbi_backpointer)
 
         tags = self.get_viterbi_path(viterbi_backpointer, last_index, T - 1)
         tags.reverse()
@@ -106,7 +104,6 @@ class HiddenMarkovModel:
         for word in splitted_sent:
             result.append((word, tags[k]))
             k = k + 1
-        print(result)
 
         return result
 
@@ -116,7 +113,6 @@ class HiddenMarkovModel:
             result.append(self.get_tag_from_index(last_index))
             last_index = viterbi_backpointer[int(last_index), column]
             column = column - 1
-        print("viterbi path: " + str(result))
         return result
 
     def update_tag_count(self, tag, array):
@@ -141,7 +137,7 @@ class HiddenMarkovModel:
             return self.likelihood_list[index]
         else:
             print("Word " + word + " not retrieved!")
-            return np.zeros(17)
+            return np.array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])
 
     def normalize_vect_count_tags(self, array):
         if array is None:
