@@ -7,14 +7,6 @@ train_data = conllu_utils.get_train_data()
 # Train HMM
 hmm = HiddenMarkovModel()
 hmm.train_hmm(train_data)
-# hmm.load_model()
-#
-# tagged = hmm.tag("ciao .".replace(",", "").split(" "))
-# tagged2 = hmm.tag("se tale decisione essere prendere anteriormente a il data".replace(",", "").split(" "))
-# tagged3 = hmm.tag("portare il mio cane".replace(",", "").split(" "))
-# print(tagged)
-# print(tagged2)
-# print(tagged3)
 
 # Get Test Data
 test_data = conllu_utils.get_test_data()

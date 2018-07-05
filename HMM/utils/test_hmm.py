@@ -12,6 +12,6 @@ def get_accuracy(hmm_output, correct_tagged_data):
             total = total + 1
             if hmm_output[s][n] == correct_tagged_data[s][n]:
                 tp_tn = tp_tn + 1
-        print("count tp+tn/tot->" + str(tp_tn) + "/" + str(total))
+        print("count (tp+tn)/ -> " + str(tp_tn) + "/" + str(total))
 
     return tp_tn / total

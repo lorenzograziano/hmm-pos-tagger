@@ -4,44 +4,42 @@ import HMM.utils.filesystem_utils as utility
 
 class HiddenMarkovModel:
 
-    word_list = []                      # All the considered words
-    likelihood_list = []
-    count_tags = np.zeros(17)           # Count global tags
-    priori = np.zeros((17, 17))         # A-priori prob matrix
-    ending_prob = np.zeros(17)          # Ending prob for each tag
-    starting_prob = np.zeros(17)        # Ending prob for each tag
-
-    # List of used tag
     tag_list = (("PROPN", 0), ("PUNCT", 1), ("NOUN", 2), ("ADP", 3), ("DET", 4), ("ADJ", 5), ("AUX", 6),
                 ("VERB", 7), ("PRON", 8), ("CCONJ", 9), ("NUM", 10), ("ADV", 11),
-                ("INTJ", 12), ("SCONJ", 13), ("X", 14), ("SYM", 15), ("PART", 16))
+                ("INTJ", 12), ("SCONJ", 13), ("X", 14), ("SYM", 15), ("PART", 16))    # List of used tag
+
+    word_list = []                                            # All the considered words
+    likelihood_list = []                                      # List of likelihood prob
+    count_tags = np.zeros(len(tag_list))                      # Count global tags
+    priori = np.zeros((len(tag_list), len(tag_list)))         # A-priori prob matrix
+    ending_prob = np.zeros(len(tag_list))                     # Ending prob for each tag
+    starting_prob = np.zeros(len(tag_list))                   # Ending prob for each tag
 
     def train_hmm(self, train_data, save_model=True):
         print("::: Begin HMM training :::")
         for sent in train_data:
             previous_tag = ""
+
             for sent_i in range(0, len(sent)):
                 tupleOfSent = sent[sent_i]
+                if sent_i == 0:
+                    self.starting_prob = self.update_tag_count(tupleOfSent[1], self.starting_prob)
+                # If previous tag is "", don't update prior probability
                 if sent_i != 0:
-                    self.count_tags = self.update_tag_count(tupleOfSent[1], self.count_tags)
-                self.update_prior(tupleOfSent[1], previous_tag)
+                    self.update_prior(tupleOfSent[1], previous_tag)
+                if sent_i == (len(sent) - 1):
+                    self.ending_prob = self.update_tag_count(tupleOfSent[1], self.ending_prob)
+                self.count_tags = self.update_tag_count(tupleOfSent[1], self.count_tags)
+
                 if tupleOfSent[0] in self.word_list:
                     # Update statistics for an already present in dict word
                     index = self.word_list.index(tupleOfSent[0])
                     self.likelihood_list[index] = self.update_likelihood(tupleOfSent[1], self.likelihood_list[index])
-                    if sent_i == 0:
-                        self.starting_prob = self.update_tag_count(tupleOfSent[1], self.starting_prob)
-                    if sent_i == (len(sent) - 1):
-                        self.ending_prob = self.update_tag_count(tupleOfSent[1], self.ending_prob)
                 else:
-
                     # If the considered word is not present in the dictionary insert it in the dictionary
                     self.word_list.append(tupleOfSent[0])
                     self.likelihood_list.append(self.update_likelihood(tupleOfSent[1]))
-                    if sent_i == 0:
-                        self.starting_prob = self.update_tag_count(tupleOfSent[1], self.starting_prob)
-                    if sent_i == (len(sent) - 1):
-                        self.ending_prob = self.update_tag_count(tupleOfSent[1], self.ending_prob)
+
                 previous_tag = tupleOfSent[1]
 
         print("The dictionary contains " + str(len(self.word_list)) + " elements")
@@ -64,9 +62,9 @@ class HiddenMarkovModel:
         return
 
     def tag(self, splitted_sent=[]):
-        # create data structures
+        # create viterbi data structures
         # N rows: states (pos tag),  T columns: observations (words)
-        N = 17
+        N = len(self.tag_list)
         T = len(splitted_sent)
         viterbi = np.zeros((N, T))
         viterbi_backpointer = np.zeros((N, T))
@@ -74,7 +72,7 @@ class HiddenMarkovModel:
         # Viterbi
         print("Start tagging sent: " + str(splitted_sent))
 
-        # Initialization Step - prob first word start the sent
+        # Initialization Step -> prob first word start the sent
         current_likelihood = self.get_likelihood_vect(splitted_sent[0])
         viterbi[:, 0] = current_likelihood * self.starting_prob
 
@@ -87,7 +85,7 @@ class HiddenMarkovModel:
                 viterbi[current_state, observation_i] = np.max(vector_prod)
                 viterbi_backpointer[current_state, observation_i] = np.argmax(vect)
 
-        # Termination Step - prob last word ending sent with a tag
+        # Termination Step -> prob last word ending sent with a tag
         viterbi[:, T - 1] = np.max(viterbi[:, T - 1] * self.ending_prob)
         last_index = np.argmax(viterbi[:, T - 1] * self.ending_prob)
 
@@ -122,7 +120,7 @@ class HiddenMarkovModel:
 
     def update_likelihood(self, tag, params=None):
         if params is None:
-            params = np.zeros(17)
+            params = np.zeros(len(self.tag_list))
         return self.update_tag_count(tag, params)
 
     def update_prior(self, tag, previous_tag):
@@ -136,12 +134,13 @@ class HiddenMarkovModel:
             index = self.word_list.index(word)
             return self.likelihood_list[index]
         else:
-            print("Word " + word + " not retrieved!")
-            return np.array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])
+            print("Word " + word + " not retrieved")
+            array = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+            return array/len(self.tag_list)
 
     def normalize_vect_count_tags(self, array):
         if array is None:
-            return np.zeros(17)
+            return np.zeros(len(self.tag_list))
         for i in range(0, 16):
             array[i] = array[i] / self.count_tags[i]
         return array
